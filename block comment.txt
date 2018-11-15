@@ -1,0 +1,590 @@
+1.index.html新增部分
+/* 在帳戶狀態的部分新增文字以顯示定存的資訊 */
+<h5 id="bankDingChun">銀行定存 (wei): </h5>
+<h5 id="bankDingChunPeriod">銀行定存期數: </h5>
+<h5 id="bankDingChunInterest">銀行定存產生的利息 (wei): </h5>
+/* 畫出作業指定的介面 */
+<hr>
+<h3>購買定存</h3>
+<input id="dingChunEtherValue" type="text" placeholder="請輸入定存金額">
+<input id="dingChunPeriod" type="number" placeholder="請輸入定存期數">
+<button id="dingChunButton">購買</button>			
+<br><br>
+<button id="dingchunFinalButton">定存期滿</button>
+<br>
+<input id="dingChunCancelPeriod" type="text" placeholder="已完成期數">
+<button id="dingChunCancelButton">提前解約</button>
+
+2.index.js新增部分
+/* 宣告定存相關變數，透過物件的id與index.html連接 */
+let bankDingChun = $('#bankDingChun');
+let bankDingChunPeriod = $('#bankDingChunPeriod');
+let bankDingChunInterest = $('#bankDingChunInterest');
+let dingChunEtherValue = $('#dingChunEtherValue');
+let dingChunPeriod = $('#dingChunPeriod');
+let dingChunButton = $('#dingChunButton');
+let dingchunFinalButton = $('#dingchunFinalButton');
+let dingChunCancelPeriod = $('#dingChunCancelPeriod');
+let dingChunCancelButton = $('#dingChunCancelButton');
+/* 
+更新畫面的部分除了原本的餘額之外顯示了該帳戶的定存相關資訊 
+底下這三行從bank.sol呼叫get method取得定存的金額、期數、利息資訊
+let bankDingChunAmount = await bank.methods.getBankDingChunAmount().call({ from: nowAccount })
+let bankDingChunPeriod = await bank.methods.getBankPeriod().call({ from: nowAccount })
+let bankDingChunInterest = await bank.methods.getBankInterest().call({ from: nowAccount })
+底下這三行負責介面的更新
+$('#bankDingChun').text('銀行定存 (wei): ' + bankDingChunAmount)
+$('#bankDingChunPeriod').text('銀行定存期數: ' + bankDingChunPeriod)
+$('#bankDingChunInterest').text('銀行定存利息: ' + bankDingChunInterest)
+*/
+update.on('click', async function () {
+	if (bankAddress != "") {
+		let ethBalance = await web3.eth.getBalance(nowAccount)
+		let bankBalance = await bank.methods.getBankBalance().call({ from: nowAccount })
+
+		let bankDingChunAmount = await bank.methods.getBankDingChunAmount().call({ from: nowAccount })
+		let bankDingChunPeriod = await bank.methods.getBankPeriod().call({ from: nowAccount })
+		let bankDingChunInterest = await bank.methods.getBankInterest().call({ from: nowAccount })
+
+		log({
+			address: bankAddress,
+			ethBalance: ethBalance,
+			bankBalance: bankBalance,
+			bankDingChunAmount: bankDingChunAmount,
+			bankDingChunPeriod: bankDingChunPeriod,
+			bankDingChunInterest: bankDingChunInterest
+		})
+		log('更新帳戶資料')
+
+		$('#ethBalance').text('以太帳戶餘額 (wei): ' + ethBalance)
+		$('#bankBalance').text('銀行ETH餘額 (wei): ' + bankBalance)
+		$('#bankDingChun').text('銀行定存 (wei): ' + bankDingChunAmount)
+		$('#bankDingChunPeriod').text('銀行定存期數: ' + bankDingChunPeriod)
+		$('#bankDingChunInterest').text('銀行定存利息: ' + bankDingChunInterest)
+	}
+	else {
+		let ethBalance = await web3.eth.getBalance(nowAccount)
+
+		$('#ethBalance').text('以太帳戶餘額 (wei): ' + ethBalance)
+		$('#bankBalance').text('銀行ETH餘額 (wei): ')
+		$('#bankDingChun').text('銀行定存 (wei): ')
+		$('#bankDingChunPeriod').text('銀行定存期數: ')
+		$('#bankDingChunInterest').text('銀行定存利息: ')
+	}
+})
+/* 
+這是購買定存的部分 
+dingChunButton被按時會觸發這段code
+與其他按鈕一樣會先做密碼驗證等動作
+透過parseInt(dingChunEtherValue.val(), 10), parseInt(dingChunPeriod.val(), 10)取得定存的金額以及期數
+並呼叫bank.sol當中的dingChun function
+成功的話log定存成功訊息
+失敗則按照bank.sol當中定義的失敗訊息發出log
+*/
+dingChunButton.on('click', async function () {
+	console.log('123');
+	if (bankAddress == "") {
+		return;
+	}
+
+	// 解鎖
+	let unlock = await unlockAccount();
+	if (!unlock) {
+		return;
+	}
+
+	// 更新介面
+	waitTransactionStatus()
+	// 轉帳
+	bank.methods.dingChun(parseInt(dingChunEtherValue.val(), 10), parseInt(dingChunPeriod.val(), 10)).send({
+		from: nowAccount,
+		gas: 3400000
+	})
+		.on('receipt', function (receipt) {
+			log(receipt.events.DingChunEvent.returnValues, '定存成功')
+
+			// 觸發更新帳戶資料
+			update.trigger('click')
+
+			// 更新介面 
+			doneTransactionStatus()
+		})
+		.on('error', function (error) {
+			log(error.toString())
+			// 更新介面 
+			doneTransactionStatus()
+		})
+})
+/* 
+這是合約期滿的部分 
+dingchunFinalButton被按時會觸發這段code
+與其他按鈕一樣會先做密碼驗證等動作
+呼叫bank.sol當中的dingChunFinal function
+成功的話log定存期滿，領回成功訊息
+失敗則按照bank.sol當中定義的失敗訊息發出log
+*/
+dingchunFinalButton.on('click', async function () {
+
+	if (bankAddress == "") {
+		return;
+	}
+
+	// 解鎖
+	let unlock = await unlockAccount();
+	if (!unlock) {
+		return;
+	}
+
+	// 更新介面
+	waitTransactionStatus()
+	// 轉帳
+	bank.methods.dingChunFinal().send({
+		from: nowAccount,
+		gas: 3400000
+	})
+		.on('receipt', function (receipt) {
+			log(receipt.events.DingChunFinalEvent.returnValues, '定存期滿，領回成功')
+
+			// 觸發更新帳戶資料
+			update.trigger('click')
+
+			// 更新介面 
+			doneTransactionStatus()
+		})
+		.on('error', function (error) {
+			log(error.toString())
+			// 更新介面 
+			doneTransactionStatus()
+		})
+})
+/* 
+這是解約定存的部分 
+dingChunCancelButton被按時會觸發這段code
+與其他按鈕一樣會先做密碼驗證等動作
+透過parseInt(dingChunCancelPeriod.val(), 10)取得解約時已完成的期數
+並呼叫bank.sol當中的dingChunCancel function
+成功的話log解除定存成功訊息
+失敗則按照bank.sol當中定義的失敗訊息發出log
+*/
+dingChunCancelButton.on('click', async function () {
+
+	if (bankAddress == "") {
+		return;
+	}
+
+	// 解鎖
+	let unlock = await unlockAccount();
+	if (!unlock) {
+		return;
+	}
+
+	// 更新介面
+	waitTransactionStatus()
+	// 轉帳
+	bank.methods.dingChunCancel(parseInt(dingChunCancelPeriod.val(), 10)).send({
+		from: nowAccount,
+		gas: 3400000
+	})
+		.on('receipt', function (receipt) {
+			log(receipt.events.DingChunCancelEvent.returnValues, '解除定存成功')
+
+			// 觸發更新帳戶資料
+			update.trigger('click')
+
+			// 更新介面 
+			doneTransactionStatus()
+		})
+		.on('error', function (error) {
+			log(error.toString())
+			// 更新介面 
+			doneTransactionStatus()
+		})
+})
+
+3.Bank.sol部分
+/* 按照balance的方法紀錄了每個帳戶定存金額、期間、產生的利息 */
+mapping (address => uint256) private dingChunAmount;
+mapping (address => uint256) private period;
+mapping (address => uint256) private interest;
+/* 事件們，用於通知前端 web3.js */
+event DingChunEvent(address indexed from, uint256 value, uint256 period, uint256 timestamp);
+event DingChunFinalEvent(address indexed from, uint256 timestamp);
+event DingChunCancelEvent(address indexed from, uint256 period, uint256 timestamp);
+/* 
+合約內購買定存的code
+etherValue取得前端傳入的定存金額
+periodValue取得前端傳入的定存期數
+先檢查銀行餘額是否足夠購買定存
+require(balance[msg.sender] >= weiValue, "your balances are not enough")
+再檢查是否已經有定存合約了
+require(dingChunAmount[msg.sender] == 0, "your already have dingchun")
+require(period[msg.sender] == 0, "your already have dingchun")
+若沒問題則將銀行餘額轉入定存並記錄期數
+*/
+function dingChun(uint256 etherValue, uint256 periodValue) public {
+        uint256 weiValue = etherValue * 1 ether;
+
+        require(balance[msg.sender] >= weiValue, "your balances are not enough");
+        require(dingChunAmount[msg.sender] == 0, "your already have dingchun");
+        require(period[msg.sender] == 0, "your already have dingchun");
+
+
+        balance[msg.sender] -= weiValue;
+        dingChunAmount[msg.sender] += weiValue;
+        period[msg.sender] += periodValue;
+
+        emit DingChunEvent(msg.sender, etherValue, periodValue, now);
+    }
+/*
+合約內定存期滿的code
+先檢查是否已購買定存
+require(dingChunAmount[msg.sender] > 0, "your don't have dingchun")
+require(period[msg.sender] > 0, "your don't have dingchun")
+若沒問題則將產生的利息存放在interest當中
+本金退回銀行餘額
+並清空定存金額及期數
+*/
+function dingChunFinal() public {
+        require(dingChunAmount[msg.sender] > 0, "your don't have dingchun");
+        require(period[msg.sender] > 0, "your don't have dingchun");
+        
+        interest[msg.sender] += dingChunAmount[msg.sender]/100*period[msg.sender];
+        balance[msg.sender] += dingChunAmount[msg.sender];
+        dingChunAmount[msg.sender] = 0;
+        period[msg.sender] = 0;
+
+        emit DingChunFinalEvent(msg.sender, now);
+    }
+/*
+合約內提前解除定存的code
+periodValue取得前端傳入的定存已存期數
+先檢查是否已購買定存
+require(dingChunAmount[msg.sender] > 0, "your don't have dingchun")
+require(period[msg.sender] > 0, "your don't have dingchun")
+再檢查輸入的期數是否有小於原本定存的期數
+require(period[msg.sender] > periodValue, "dingchun period less than input period")
+若沒問題則將產生的利息存放在interest當中
+本金退回銀行餘額
+並清空定存金額及期數
+*/
+function dingChunCancel(uint256 periodValue) public {
+        require(dingChunAmount[msg.sender] > 0, "your don't have dingchun");
+        require(period[msg.sender] > 0, "your don't have dingchun");
+        require(period[msg.sender] > periodValue, "dingchun period less than input period");
+        
+        interest[msg.sender] += dingChunAmount[msg.sender]/100*periodValue;
+        balance[msg.sender] += dingChunAmount[msg.sender];
+        dingChunAmount[msg.sender] = 0;
+        period[msg.sender] = 0;
+
+        emit DingChunCancelEvent(msg.sender, periodValue, now);
+    }
+/*設定定存金額、期數、利息的getter，讓前端可以取得這些資訊*/
+    function getBankDingChunAmount() public view returns (uint256) {
+        return dingChunAmount[msg.sender];
+    }
+    function getBankPeriod() public view returns (uint256) {
+        return period[msg.sender];
+    }
+    function getBankInterest() public view returns (uint256) {
+        return interest[msg.sender];
+    }
+
+4.bank.js及Bank.js部分
+/*
+在remix上編寫完Bank.sol之後
+將remix編譯後產生的bytecode及abi貼到這兩個js當中
+*/
+let bankBytecode = "608060405260008054600160a060020a031916331790556109ba806100256000396000f3006080604052600436106100ae5763ffffffff7c01000000000000000000000000000000000000000000000000000000006000350416632e1a7d4d81146100b357806341c0e1b5146100cd5780637b83b50b146100e25780638fbd5e931461010957806397188bbf1461011e578063988da2bc14610139578063a20907681461014e578063a69e2ed614610163578063a9059cbb1461017b578063aaa114aa146101ac578063d0e30db0146101c1575b600080fd5b3480156100bf57600080fd5b506100cb6004356101c9565b005b3480156100d957600080fd5b506100cb6102c2565b3480156100ee57600080fd5b506100f761034c565b60408051918252519081900360200190f35b34801561011557600080fd5b506100f761035f565b34801561012a57600080fd5b506100cb600435602435610372565b34801561014557600080fd5b506100f7610524565b34801561015a57600080fd5b506100cb610537565b34801561016f57600080fd5b506100cb60043561065c565b34801561018757600080fd5b506100cb73ffffffffffffffffffffffffffffffffffffffff60043516602435610812565b3480156101b857600080fd5b506100f7610903565b6100cb610916565b33600090815260016020526040902054670de0b6b3a764000082029081111561023c576040805160e560020a62461bcd02815260206004820152601c60248201527f796f75722062616c616e63657320617265206e6f7420656e6f75676800000000604482015290519081900360640190fd5b604051339082156108fc029083906000818181858888f19350505050158015610269573d6000803e3d6000fd5b5033600081815260016020908152604091829020805485900390558151858152429181019190915281517f5bb95829671915ece371da722f91d5371159095dcabf2f75cd6c53facb7e1bab929181900390910190a25050565b60005473ffffffffffffffffffffffffffffffffffffffff163314610331576040805160e560020a62461bcd02815260206004820152601160248201527f796f7520617265206e6f74206f776e6572000000000000000000000000000000604482015290519081900360640190fd5b60005473ffffffffffffffffffffffffffffffffffffffff16ff5b3360009081526001602052604090205490565b3360009081526002602052604090205490565b33600090815260016020526040902054670de0b6b3a76400008302908111156103e5576040805160e560020a62461bcd02815260206004820152601c60248201527f796f75722062616c616e63657320617265206e6f7420656e6f75676800000000604482015290519081900360640190fd5b336000908152600260205260409020541561044a576040805160e560020a62461bcd02815260206004820152601a60248201527f796f757220616c726561647920686176652064696e676368756e000000000000604482015290519081900360640190fd5b33600090815260036020526040902054156104af576040805160e560020a62461bcd02815260206004820152601a60248201527f796f757220616c726561647920686176652064696e676368756e000000000000604482015290519081900360640190fd5b336000818152600160209081526040808320805486900390556002825280832080548601905560038252918290208054860190558151868152908101859052428183015290517f65b52bf5a3df84cb322b46bfde60f88a8c57e4ab965b3d1d8d83d1ab520a4d7f9181900360600190a2505050565b3360009081526004602052604090205490565b336000908152600260205260408120541161058a576040805160e560020a62461bcd028152602060048201526018602482015260008051602061096f833981519152604482015290519081900360640190fd5b33600090815260036020526040812054116105dd576040805160e560020a62461bcd028152602060048201526018602482015260008051602061096f833981519152604482015290519081900360640190fd5b33600081815260036020818152604080842080546002845282862080546004865284882080546064909204909302019091558054600185528387208054909101905585905592825292909155815142815291517f6c99a67f1e4d00c64483744d777202743b7c39eb92c13a4cd05fdd943f6790fe9281900390910190a2565b33600090815260026020526040812054116106af576040805160e560020a62461bcd028152602060048201526018602482015260008051602061096f833981519152604482015290519081900360640190fd5b3360009081526003602052604081205411610702576040805160e560020a62461bcd028152602060048201526018602482015260008051602061096f833981519152604482015290519081900360640190fd5b33600090815260036020526040902054811061078e576040805160e560020a62461bcd02815260206004820152602660248201527f64696e676368756e20706572696f64206c657373207468616e20696e7075742060448201527f706572696f640000000000000000000000000000000000000000000000000000606482015290519081900360840190fd5b33600081815260026020908152604080832080546004845282852080546064909204880290910190558054600184528285208054909101905583905560038252808320929092558151848152429181019190915281517f398df451a6ab1ead6f01cd543c603cfe092b7ad0fb6a003b2649727b9b4aeb1c929181900390910190a250565b33600090815260016020526040902054670de0b6b3a7640000820290811115610885576040805160e560020a62461bcd02815260206004820152601c60248201527f796f75722062616c616e63657320617265206e6f7420656e6f75676800000000604482015290519081900360640190fd5b3360008181526001602090815260408083208054869003905573ffffffffffffffffffffffffffffffffffffffff8716808452928190208054860190558051868152429281019290925280519293927fbabc8cd3bd6701ee99131f374fd2ab4ea66f48dc4e4182ed78fecb0502e44dd69281900390910190a3505050565b3360009081526003602052604090205490565b336000818152600160209081526040918290208054349081019091558251908152429181019190915281517fad40ae5dc69974ba932d08b0a608e89109412d41d04850f5196f144875ae2660929181900390910190a25600796f757220646f6e277420686176652064696e676368756e0000000000000000a165627a7a72305820ec53d60724f8ea1200ee0193f4eb3a9218890279151cd5ccabb78c4105d2567a0029"
+let bankAbi = [
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "etherValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "withdraw",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [],
+    "name": "kill",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getBankBalance",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getBankDingChunAmount",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "etherValue",
+        "type": "uint256"
+      },
+      {
+        "name": "periodValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "dingChun",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getBankInterest",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [],
+    "name": "dingChunFinal",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "periodValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "dingChunCancel",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "name": "etherValue",
+        "type": "uint256"
+      }
+    ],
+    "name": "transfer",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getBankPeriod",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [],
+    "name": "deposit",
+    "outputs": [],
+    "payable": true,
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "payable": true,
+    "stateMutability": "payable",
+    "type": "constructor"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "value",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DepositEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "value",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "WithdrawEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "value",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "TransferEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "value",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "period",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DingChunEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DingChunFinalEvent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "name": "period",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "DingChunCancelEvent",
+    "type": "event"
+  }
+];

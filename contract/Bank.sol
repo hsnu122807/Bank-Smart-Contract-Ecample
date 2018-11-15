@@ -10,7 +10,7 @@ contract Bank {
     // 儲存所有會員的定存及利息
     mapping (address => uint256) private dingChunAmount;
     mapping (address => uint256) private period;
-    mapping (address => uint256) private intrest;
+    mapping (address => uint256) private interest;
 
     // 事件們，用於通知前端 web3.js
     event DepositEvent(address indexed from, uint256 value, uint256 timestamp);
@@ -94,7 +94,7 @@ contract Bank {
         require(dingChunAmount[msg.sender] > 0, "your don't have dingchun");
         require(period[msg.sender] > 0, "your don't have dingchun");
         
-        intrest[msg.sender] += dingChunAmount[msg.sender]/100*period[msg.sender];
+        interest[msg.sender] += dingChunAmount[msg.sender]/100*period[msg.sender];
         balance[msg.sender] += dingChunAmount[msg.sender];
         dingChunAmount[msg.sender] = 0;
         period[msg.sender] = 0;
@@ -108,7 +108,7 @@ contract Bank {
         require(period[msg.sender] > 0, "your don't have dingchun");
         require(period[msg.sender] > periodValue, "dingchun period less than input period");
         
-        intrest[msg.sender] += dingChunAmount[msg.sender]/100*periodValue;
+        interest[msg.sender] += dingChunAmount[msg.sender]/100*periodValue;
         balance[msg.sender] += dingChunAmount[msg.sender];
         dingChunAmount[msg.sender] = 0;
         period[msg.sender] = 0;
@@ -123,7 +123,7 @@ contract Bank {
     function getBankPeriod() public view returns (uint256) {
         return period[msg.sender];
     }
-    function getBankIntrest() public view returns (uint256) {
-        return intrest[msg.sender];
+    function getBankInterest() public view returns (uint256) {
+        return interest[msg.sender];
     }
 }
